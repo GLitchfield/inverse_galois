@@ -1,0 +1,46 @@
+[project]
+name = "igp"
+version = "0.0.1"
+description = "SAIR Inverse Galois Problem (IGP24): degree-24 polynomials realizing transitive Galois groups 24T1..24T25000"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.0",
+    "psycopg2-binary>=2.9.12",
+    "requests>=2.32",
+    "scikit-learn>=1.9.0",
+    "sympy>=1.13",
+]
+
+# Heavy computational-algebra backends are SYSTEM dependencies, installed out of band
+# (documented in README / docs/competition_rules.md), NOT pinned here:
+#   - PARI/GP (+ optional cypari2 bindings) for local Galois-group / number-field work
+#   - GAP (transitive-groups library) for degree-24 group metadata (24T labels, orders, parity)
+#   - MAGMA via the SAIR API (network) for authoritative Galois-group verification
+# They need system libraries / licenses, so they don't belong in a `uv sync`.
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "ipykernel>=6",
+    "jupyterlab>=4",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/igp"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

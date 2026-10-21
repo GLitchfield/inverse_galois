@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IGP24 search dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --border:#30363d; --fg:#e6edf3; --muted:#8b949e;
+          --accent:#58a6ff; --good:#3fb950; --warn:#d29922; --gold:#e3b341; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:14px/1.45 ui-sans-serif,-apple-system,Segoe UI,Roboto,sans-serif; }
+  header { display:flex; align-items:baseline; gap:16px; flex-wrap:wrap;
+           padding:16px 22px; border-bottom:1px solid var(--border); }
+  header h1 { font-size:18px; margin:0; font-weight:650; }
+  .gen { color:var(--muted); font-size:12px; margin-left:auto; }
+  .badge { padding:2px 10px; border-radius:20px; font-size:12px; font-weight:600; }
+  .badge.running { background:rgba(63,185,80,.15); color:var(--good); }
+  .badge.paused  { background:rgba(210,153,34,.15); color:var(--warn); }
+  .badge.stopped { background:rgba(248,81,73,.15); color:#f85149; }
+  .stats { display:flex; gap:26px; padding:14px 22px; flex-wrap:wrap;
+           border-bottom:1px solid var(--border); }
+  .stat .v { font-size:26px; font-weight:700; }
+  .stat .v.gold { color:var(--gold); }
+  .stat .k { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  .grid { display:grid; gap:16px; padding:18px 22px;
+          grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+  .panel h2 { font-size:13px; margin:0 0 12px; color:var(--muted); text-transform:uppercase;
+              letter-spacing:.04em; font-weight:600; }
+  .panel.wide { grid-column:1/-1; }
+  canvas { max-height:280px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th,td { text-align:left; padding:5px 8px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:600; }
+  td.num,th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .pill { font-family:ui-monospace,monospace; font-size:12px; color:var(--accent); }
+  .mono { font-family:ui-monospace,monospace; }
+  .badge.idle { background:rgba(139,148,158,.15); color:var(--muted); }
+  .badge.on   { background:rgba(63,185,80,.15); color:var(--good); }
+  .badge.off  { background:rgba(248,81,73,.15); color:#f85149; }
+  .badge.sm   { font-size:11px; padding:1px 8px; }
+  .tok { color:var(--gold); font-weight:600; font-size:11px; }
+  .sys-startup { color:var(--muted); font-size:12.5px; margin:-2px 0 12px; }
+  .sys-startup b { color:var(--fg); font-weight:600; }
+  .sys-procs { margin-top:12px; font-size:12.5px; color:var(--muted); }
+  .sys-procs .row { padding:3px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>IGP24 search</h1>
+  <span id="daemon" class="badge">—</span>
+  <span class="gen">updated <span id="gen">—</span> · auto-refresh 30s</span>
+</header>
+<div class="stats">
+  <div class="stat"><div class="v" id="s-groups">—</div><div class="k">groups</div></div>
+  <div class="stat"><div class="v" id="s-scoreable">—</div><div class="k">scoreable sigs (distinct)</div></div>
+  <div class="stat"><div class="v gold" id="s-sole">—</div><div class="k">1.0 held (non-baseline)</div></div>
+  <div class="stat"><div class="v" id="s-open">—</div><div class="k">open 1.0 (sig-fill)</div></div>
+  <div class="stat"><div class="v" id="s-disc">—</div><div class="k">behind on disc</div></div>
+  <div class="stat"><div class="v" id="s-queued">—</div><div class="k">queued</div></div>
+</div>
+<div class="grid">
+  <div class="panel wide"><h2>System status</h2>
+    <div id="sys-startup" class="sys-startup">—</div>
+    <table class="sys-table"><thead><tr>
+      <th>service</th><th>role</th><th>state</th><th>uptime / schedule</th><th>spends</th>
+    </tr></thead><tbody id="sys-services"></tbody></table>
+    <div id="sys-feed" class="sys-procs"></div>
+    <div id="sys-procs" class="sys-procs"></div>
+  </div>
+  <div class="panel wide"><h2>Coverage trajectory</h2><canvas id="traj"></canvas></div>
+  <div class="panel"><h2>Queue pipeline</h2><canvas id="queue"></canvas></div>
+  <div class="panel"><h2>Throughput (per day)</h2><canvas id="thru"></canvas></div>
+  <div class="panel"><h2>Producers (bandit weight)</h2><canvas id="prod"></canvas></div>
+  <div class="panel"><h2>1.0 held (non-baseline, sole)</h2>
+    <table><thead><tr><th>group</th><th>producer</th><th class="num">disc digits</th></tr></thead>
+    <tbody id="soles"></tbody></table>
+  </div>
+</div>
+<script>
+const C = { fg:'#e6edf3', muted:'#8b949e', grid:'#21262d', accent:'#58a6ff', good:'#3fb950',
+            gold:'#e3b341', warn:'#d29922' };
+if(!window.Chart){ document.body.insertAdjacentHTML('afterbegin',
+  '<p style="color:#f85149;padding:8px 22px;margin:0">Chart.js failed to load (offline / CDN blocked?) — charts disabled; numbers below still update.</p>'); }
+if(window.Chart){ Chart.defaults.color=C.muted; Chart.defaults.borderColor=C.grid; Chart.defaults.font.size=12; }
+
+function mk(id, cfg){ try { return window.Chart ? new Chart(document.getElementById(id), cfg) : null; }
+  catch(e){ console.error('chart', id, e); return null; } }
+const noLegend = { plugins:{legend:{display:false}} };
+
+const traj = mk('traj', { type:'line', data:{datasets:[
+    {label:'groups', borderColor:C.accent, backgroundColor:'transparent', tension:.2,
+     pointRadius:2.5, pointHoverRadius:8, pointHoverBorderWidth:2, pointHoverBorderColor:C.fg, data:[]},
+    {label:'scoreable sigs', borderColor:C.good, backgroundColor:'transparent', tension:.2,
+     pointRadius:2.5, pointHoverRadius:8, pointHoverBorderWidth:2, pointHoverBorderColor:C.fg, data:[]}]},
+  options:{ parsing:false, interaction:{mode:'index', intersect:false}, scales:{
+      x:{ type:'linear', grid:{color:C.grid},
+          ticks:{ maxTicksLimit:18, autoSkip:true, maxRotation:50, minRotation:0,
+                  callback:v=>new Date(v).toISOString().slice(5,16).replace('T',' ') } },
+      y:{ grid:{color:C.grid} } },
+    plugins:{ legend:{labels:{color:C.fg}},
+      tooltip:{ callbacks:{ title:items=>new Date(items[0].parsed.x).toLocaleString(),
+        afterBody:items=>{ const r=items[0].raw||{}; const b=[];
+          if(r.sole!=null) b.push('sole 1.0s: '+r.sole); if(r.est!=null) b.push('est score: '+r.est);
+          return b.join('   '); } } } } } });
+
+const queue = mk('queue', { type:'doughnut', data:{labels:[],datasets:[{data:[],backgroundColor:
+  [C.accent,C.warn,'#a371f7',C.good,'#f85149','#6e7681','#484f58']}]},
+  options:{ plugins:{legend:{position:'right',labels:{color:C.fg,boxWidth:12}}} } });
+
+const thru = mk('thru', { type:'bar', data:{labels:[],datasets:[
+    {label:'posts', backgroundColor:C.accent, data:[]},
+    {label:'verified', backgroundColor:C.good, data:[]}]},
+  options:{ scales:{x:{grid:{display:false}},y:{grid:{color:C.grid}}},
+    plugins:{legend:{labels:{color:C.fg}}} } });
+
+const prod = mk('prod', { type:'bar', data:{labels:[],datasets:[{label:'weight',
+  backgroundColor:C.gold, data:[]}]},
+  options:{ indexAxis:'y', scales:{x:{grid:{color:C.grid}},y:{grid:{display:false}}}, ...noLegend } });
+
+function fmtDur(s){ if(s==null) return '—'; if(s<90) return s+'s';
+  const m=Math.round(s/60); if(m<90) return m+'m'; const h=Math.floor(m/60); return h+'h '+(m%60)+'m'; }
+function agoStr(rel){ if(!rel) return '—'; if(rel.rel_s==null) return rel.at;
+  const s=rel.rel_s; return rel.at+(s>=0?' ('+fmtDur(s)+' ago)':' (in '+fmtDur(-s)+')'); }
+function renderSystem(sys){
+  if(!sys) return;
+  document.getElementById('sys-startup').innerHTML =
+    'Booted <b>'+fmtDur(sys.boot_rel_s)+'</b> ago · linger <b>'+(sys.linger?'on':'OFF')+'</b> · '+(sys.note||'');
+  document.getElementById('sys-services').innerHTML = sys.services.map(s=>{
+    const state = s.running ? '<span class="badge on sm">running</span>'
+                            : '<span class="badge idle sm">idle</span>';
+    const sched = s.kind==='service' ? (s.running?'up '+fmtDur(s.uptime_s):'stopped')
+      : ('last '+agoStr(s.last)+(s.next&&s.next.rel_s!=null?' · next '+agoStr(s.next):''));
+    const tok = s.claude ? '<span class="tok">Claude &#9679;</span>' : '<span style="color:var(--muted)">&mdash;</span>';
+    return `<tr><td class="mono">${s.name}</td><td style="color:var(--muted)">${s.blurb}</td>`+
+           `<td>${state}</td><td class="mono" style="font-size:12px">${sched}</td><td>${tok}</td></tr>`;
+  }).join('');
+  const ph = sys.producer_health;
+  if(ph){
+    const flag = (ph.silent+ph.error)>0;
+    const deads = (ph.dead||[]).map(x=>`<span style="color:${x.why==='error'?'#f85149':'var(--warn)'}">${x.name} (${x.why}: ${x.detail})</span>`).join(' &nbsp;·&nbsp; ');
+    document.getElementById('sys-feed').innerHTML =
+      '<b style="color:var(--fg)">Producer feed:</b> '+
+      '<span style="color:var(--good)">'+ph.live+' live</span>'+
+      (ph.silent?' · <span style="color:var(--warn)">'+ph.silent+' silent</span>':'')+
+      (ph.error?' · <span style="color:#f85149">'+ph.error+' error</span>':'')+
+      ' of '+ph.total+ (flag ? ' &nbsp;— '+deads : ' &nbsp;<span style="color:var(--good)">all healthy</span>');
+  }
+  const p = sys.claude_procs||[];
+  document.getElementById('sys-procs').innerHTML =
+    '<b style="color:var(--fg)">Live Claude processes ('+p.length+'):</b> '+
+    (p.length ? p.map(x=>`<span class="row">${x.label} &mdash; ${fmtDur(x.elapsed_s)}, ${x.rss_mb}MB (pid ${x.pid})</span>`).join(' &nbsp;·&nbsp; ') : 'none');
+}
+
+async function refresh(){
+  let d; try { d = await (await fetch('/api/data')).json(); } catch(e){ return; }
+  try { renderSystem(d.system); } catch(e){ console.error('system panel', e); }
+  const s = d.summary;
+  document.getElementById('s-groups').textContent = s.groups;
+  document.getElementById('s-scoreable').textContent = s.scoreable_sigs + ' (' + s.scoreable_rows + ' polys)';
+  document.getElementById('s-sole').textContent = s.true_1pt;
+  document.getElementById('s-open').textContent = s.open_sigfill;
+  document.getElementById('s-disc').textContent = s.disc_behind + '/' + s.disc_total;
+  document.getElementById('s-queued').textContent = s.queued;
+  document.getElementById('gen').textContent = d.generated;
+  const b = document.getElementById('daemon');
+  b.textContent = s.daemon + ' · last ' + s.last_cycle; b.className = 'badge ' + s.daemon;
+  document.getElementById('soles').innerHTML = d.soles.map(x=>
+    `<tr><td class="pill">${x.label} <span style="color:var(--muted)">r${x.r}</span></td>`+
+    `<td class="mono">${x.producer}</td><td class="num">${x.disc_digits??'—'}</td></tr>`).join('')
+    || '<tr><td colspan=3 style="color:var(--muted)">none currently sole</td></tr>';
+
+  try {  // charts are best-effort; the numbers + table above always update
+    if(traj){ traj.data.datasets[0].data = d.trajectory.map(p=>({x:p.t,y:p.groups,est:p.est,sole:p.sole}));
+      traj.data.datasets[1].data = d.trajectory.map(p=>({x:p.t,y:p.scoreable,est:p.est,sole:p.sole})); traj.update(); }
+    if(queue){ const qk = Object.keys(d.queue);
+      queue.data.labels = qk; queue.data.datasets[0].data = qk.map(k=>d.queue[k]); queue.update(); }
+    if(thru){ thru.data.labels = d.throughput.posts.map(p=>p.day.slice(5));
+      thru.data.datasets[0].data = d.throughput.posts.map(p=>p.n);
+      const vmap = Object.fromEntries(d.throughput.verified.map(v=>[v.day,v.n]));
+      thru.data.datasets[1].data = d.throughput.posts.map(p=>vmap[p.day]||0); thru.update(); }
+    if(prod){ prod.data.labels = d.producers.map(p=>p.name);
+      prod.data.datasets[0].data = d.producers.map(p=>p.weight); prod.update(); }
+  } catch(e){ console.error('chart update failed', e); }
+}
+refresh(); setInterval(refresh, 30000);
+</script>
+</body>
+</html>

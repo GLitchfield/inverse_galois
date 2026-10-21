@@ -1,0 +1,7 @@
+24T14051 subfieldDegrees=[ 1, 3, 24 ]
+24T14052 subfieldDegrees=[ 1, 3, 24 ]
+24T16060 subfieldDegrees=[ 1, 3, 24 ]
+24T16061 subfieldDegrees=[ 1, 3, 24 ]
+24T19280 subfieldDegrees=[ 1, 3, 24 ]
+24T20408 subfieldDegrees=[ 1, 3, 24 ]
+24T24315 subfieldDegrees=[ 1, 3, 24 ]

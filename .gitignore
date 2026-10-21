@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+
+# Caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Data: raw + processed contents are not tracked.
+# data/targets/ (canonical (t,r) / group index) is tracked for reproducibility.
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# Polynomial solution data is not published. The pipeline (re)writes these locally:
+#   realized.csv      <- scripts/searchd.py / src/igp/db.py (every SAIR-verified polynomial + coeffs)
+#   submissions/      <- scripts/build_submission.py
+#   test_polys.jl     <- scripts/oscar/extract_test_polys.py (sampled from realized.csv)
+data/targets/realized.csv
+submissions/*
+!submissions/.gitkeep
+scripts/oscar/test_polys.jl
+# Snapshot of SAIR's live per-pair discovery state for all teams (discovered / teamCount /
+# minimum disc); regenerate with scripts/q02_pull_signature_index.py (needs a SAIR API key).
+data/targets/signatures_deg24.csv
+
+# Secrets backstop
+.env
+.env*
+*api_key*
+*.pem
+*.key
+
+# Soft-delete area
+trash/*
+!trash/.gitkeep
+
+# Vendored external repos / large DB dumps (cloned, not committed into history)
+vendor/
+
+# Search / verification run logs
+logs/
+*.log
+
+# Claude Code local-only settings
+.claude/settings.local.json
+.claude/cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS / transfer artifacts
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
