@@ -11,10 +11,9 @@ the experiment write-ups, and the record of the autonomous agents that built and
 
 ## Status
 
-- **Paused on 2026-07-14.** The owner shut down all runners: the search daemon and the agent loops.
-  The project worked on the competition from 2026-06-24 to 2026-07-14 and submitted nothing after
-  that. The Stage-1 deadline was 2026-08-15 12:00 UTC (`docs/competition_rules.md`). Final standings
-  after the deadline are not recorded here.
+- **Paused on 2026-07-14.** I shut down the search daemon and the agent loops to work on another
+  project. The entry worked on the competition from 2026-06-24 to 2026-07-14 and submitted nothing
+  after that. It finished **28th of about 200** at the Stage-1 deadline (2026-08-15).
 - **The polynomial data is not published**: no coefficients, and no per-group or per-pair results.
   The pipeline writes them locally to the gitignored `data/targets/realized.csv` and `submissions/`.
   Only aggregate numbers are published.
@@ -93,8 +92,8 @@ producers (scripts/search_ctl.py, 26 run by the refill tick)
 
 ## Autonomous agents
 
-The code, the experiments and most of the notes were written by Claude Code agents, directed by
-the owner. An interactive session ran under the owner's supervision. Three headless loops ran on systemd user timers through
+The code, the experiments and most of the notes were written by Claude Code agents that I directed.
+An interactive session ran under my supervision. Three headless loops ran on systemd user timers through
 `scripts/run_headless_agent.sh`:
 
 | Loop | Schedule | Job |
@@ -103,10 +102,8 @@ the owner. An interactive session ran under the owner's supervision. Three headl
 | build | every 3 h (from 2026-07-07) | build the top ready item from a build backlog, gate it locally, pilot it, enqueue it |
 | audit | daily 08:17 | self-audit: score trend, resources used versus available, invariants, an adversarial re-check of the last day's claims |
 
-Each run was a non-interactive `claude -p` call: high reasoning effort on a claude.ai subscription,
-using Opus (`claude-opus-4-8`) for 208 of the 216 runs. It was launched with **`--dangerously-skip-permissions`**, so no tool call
-needed approval. The repository shows no sandbox or container: the runs had the full access of the
-owner's user account, including git push to the private development repository. The prompts are in
+Each run was a non-interactive `claude -p` call with permission prompts turned off, so the loops
+could run unattended. Opus ran 208 of the 216 runs. The prompts are in
 `scripts/headless_prompts/`, and the interactive playbooks in `.claude/skills/`. OpenAI Codex acted
 as an outside reviewer and kept `AGENTS.md`. Outside reviews are in
 [docs/project_review_2026-06-28.md](docs/project_review_2026-06-28.md) and
@@ -117,7 +114,7 @@ as an outside reviewer and kept `AGENTS.md`. Outside reviews are in
 2026-07-01 to 2026-07-14. The 209 runs that logged usage used 580.8M tokens, of which 548.9M were
 cache reads and 7.6M were output.
 
-**Failures and controls.** The owner caught the agents, and the agents caught each other:
+**Failures and controls.** I caught the agents, and the agents caught each other:
 
 - blaming SAIR's service for hours when our own client was at fault;
 - declaring a ceiling three times on a search space they had barely sampled;
@@ -172,7 +169,9 @@ and `scripts/searchd.py`) needs a SAIR API key, in `data/raw/sair_api_key.txt` o
 and the SAIR verifier, which may no longer accept IGP24 submissions. `scripts/q02_pull_signature_index.py`
 and `search_ctl.py refresh` pull the live leaderboard state that several producers need. The agent
 loops (`scripts/install_headless_loops.sh`) read and write the unpublished journal, agenda and
-backlog files, so they would need new ones before they could run. Note that
+backlog files, so they would need new ones before they could run. The loops run `claude` with
+`--dangerously-skip-permissions` and no sandbox, so run them only in an isolated account or
+container. Note that
 `scripts/fetch_competition_package.py` overwrites `src/igp/mixed_disc.gp` with the package's older
 version.
 
